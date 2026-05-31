@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JSY vs JDY 主题色对比</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #fff;
+      overflow-x: hidden;
+    }
+
+    /* ===== 顶部 Tab ===== */
+    .tab-bar {
+      position: sticky; top: 0; z-index: 300;
+      display: flex; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+    .tab-item {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 16px 0; font-size: 15px; font-weight: 500; color: #888; cursor: pointer;
+      border-bottom: 3px solid transparent; transition: color .2s, border-color .2s; user-select: none;
+    }
+    .tab-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .tab-item[data-tab="blue"]   .tab-dot { background: #2b73f0; }
+    .tab-item[data-tab="orange"] .tab-dot { background: #fa851e; }
+    .tab-item[data-tab="red"]    .tab-dot { background: #ef5655; }
+    .tab-item[data-tab="blue"].active   { color: #2b73f0; border-color: #2b73f0; }
+    .tab-item[data-tab="orange"].active { color: #fa851e; border-color: #fa851e; }
+    .tab-item[data-tab="red"].active    { color: #ef5655; border-color: #ef5655; }
+
+    /* ===== 面板 ===== */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ===== 图片对比区域，固定 1440px 居中 ===== */
+    .compare-wrapper {
+      position: relative;
+      width: 1440px;
+      margin: 0 auto;
+      overflow: hidden;
+      cursor: ew-resize;
+      user-select: none;
+      touch-action: pan-y;
+      background: #fff;
+    }
+
+    /* 底层：JDY */
+    .img-jdy { display: block; width: 100%; height: auto; pointer-events: none; }
+
+    /* 覆盖层：JSY（左侧裁剪，width 由 JS 控制） */
+    .img-jsy-wrap { position: absolute; top: 0; left: 0; height: 100%; overflow: hidden; }
+    .img-jsy { display: block; height: auto; pointer-events: none; }
+
+    /* 分割线 */
+    .divider {
+      position: absolute; top: 0; bottom: 0; width: 3px;
+      background: #000; transform: translateX(-50%);
+      pointer-events: none; z-index: 5;
+    }
+
+    /* ===== fixed 浮层：标签，始终在视口垂直中线 ===== */
+    .float-ui {
+      position: fixed;
+      z-index: 400;
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      pointer-events: none;
+      visibility: hidden;
+    }
+
+    /* 标签 */
+    .label {
+      padding: 5px 16px; border-radius: 20px;
+      font-size: 13px; font-weight: 600; letter-spacing: .5px;
+      white-space: nowrap;
+    }
+    .label-jsy { background: #000; color: #fff; }
+    .label-jdy { background: #000; color: #fff; }
+
+    /* 圆形手柄 — 已删除 */
+  </style>
+</head>
+<body>
+
+<!-- 顶部 Tab -->
+<div class="tab-bar">
+  <div class="tab-item active" data-tab="blue"><span class="tab-dot"></span>蓝色主题</div>
+  <div class="tab-item" data-tab="orange"><span class="tab-dot"></span>橙色主题</div>
+  <div class="tab-item" data-tab="red"><span class="tab-dot"></span>红色主题</div>
+</div>
+
+<!-- 面板 -->
+<div class="panel active" data-panel="blue">
+  <div class="compare-wrapper" id="cmp-blue">
+    <img class="img-jdy" src="蓝色-JDY.png" alt="蓝色 JDY" draggable="false" />
+    <div class="img-jsy-wrap" id="jsy-blue"><img class="img-jsy" src="蓝色-JSY.png" alt="蓝色 JSY" draggable="false" /></div>
+    <div class="divider" id="div-blue"></div>
+  </div>
+</div>
+
+<div class="panel" data-panel="orange">
+  <div class="compare-wrapper" id="cmp-orange">
+    <img class="img-jdy" src="橙色-JDY.png" alt="橙色 JDY" draggable="false" />
+    <div class="img-jsy-wrap" id="jsy-orange"><img class="img-jsy" src="橙色-JSY.png" alt="橙色 JSY" draggable="false" /></div>
+    <div class="divider" id="div-orange"></div>
+  </div>
+</div>
+
+<div class="panel" data-panel="red">
+  <div class="compare-wrapper" id="cmp-red">
+    <img class="img-jdy" src="红色-JDY.png" alt="红色 JDY" draggable="false" />
+    <div class="img-jsy-wrap" id="jsy-red"><img class="img-jsy" src="红色-JSY.png" alt="红色 JSY" draggable="false" /></div>
+    <div class="divider" id="div-red"></div>
+  </div>
+</div>
+
+<!-- Fixed 浮层：始终在视口中间，水平跟随拖拽线 -->
+<div class="float-ui" id="floatUI">
+  <span class="label label-jsy">JSY</span>
+  <span class="label label-jdy">JDY</span>
+</div>
+
+<script>
+  const tabItems = document.querySelectorAll('.tab-item');
+  const panels   = document.querySelectorAll('.panel');
+  const floatUI  = document.getElementById('floatUI');
+
+  const PANELS = {};
+  ['blue','orange','red'].forEach(key => {
+    PANELS[key] = {
+      wrapper : document.getElementById('cmp-' + key),
+      jsyWrap : document.getElementById('jsy-' + key),
+      jsyImg  : document.querySelector('#jsy-' + key + ' .img-jsy'),
+      divider : document.getElementById('div-' + key),
+      ratio   : 0.5,
+    };
+  });
+  let activeKey = 'blue';
+
+  /* 应用比例：更新裁剪宽度和分割线位置 */
+  function applyRatio(key, r) {
+    const p = PANELS[key];
+    p.ratio = Math.max(0.02, Math.min(0.98, r));
+    const totalW = p.wrapper.offsetWidth;
+    const px = totalW * p.ratio;
+    p.jsyWrap.style.width = px + 'px';
+    p.jsyImg.style.width  = totalW + 'px';
+    p.divider.style.left  = px + 'px';
+  }
+
+  /* 定位浮层：
+     - 水平：跟随当前分割线（相对视口的 x）
+     - 垂直：固定在视口垂直正中（window.innerHeight / 2） */
+  function positionFloat() {
+    const p    = PANELS[activeKey];
+    const rect = p.wrapper.getBoundingClientRect();
+
+    // 图片完全离开视口时隐藏
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) {
+      floatUI.style.visibility = 'hidden';
+      return;
+    }
+    floatUI.style.visibility = 'visible';
+
+    // 水平 = 图片左边 + 比例 * 图片宽
+    const x = rect.left + p.ratio * rect.width;
+    // 垂直 = 视口正中
+    const y = window.innerHeight / 2;
+
+    floatUI.style.left = x + 'px';
+    floatUI.style.top  = y + 'px';
+  }
+
+  /* Tab 切换 */
+  tabItems.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabItems.forEach(t => t.classList.remove('active'));
+      panels.forEach(p  => p.classList.remove('active'));
+      tab.classList.add('active');
+      activeKey = tab.dataset.tab;
+      document.querySelector(`[data-panel="${activeKey}"]`).classList.add('active');
+      applyRatio(activeKey, PANELS[activeKey].ratio);
+      positionFloat();
+    });
+  });
+
+  /* 拖拽逻辑 */
+  let dragging = false;
+
+  function updateFromClientX(clientX) {
+    const p    = PANELS[activeKey];
+    const rect = p.wrapper.getBoundingClientRect();
+    applyRatio(activeKey, (clientX - rect.left) / rect.width);
+    positionFloat();
+  }
+
+  // 点击图片区域直接跳位
+  Object.values(PANELS).forEach(p => {
+    p.wrapper.addEventListener('pointerdown', e => {
+      dragging = true;
+      p.wrapper.setPointerCapture(e.pointerId);
+      updateFromClientX(e.clientX);
+    });
+  });
+
+  window.addEventListener('pointermove',  e => { if (dragging) updateFromClientX(e.clientX); });
+  window.addEventListener('pointerup',    () => { dragging = false; });
+  window.addEventListener('pointercancel',() => { dragging = false; });
+
+  /* 滚动 / 窗口大小变化时刷新浮层位置 */
+  window.addEventListener('scroll', positionFloat, { passive: true });
+  window.addEventListener('resize', () => {
+    ['blue','orange','red'].forEach(k => applyRatio(k, PANELS[k].ratio));
+    positionFloat();
+  });
+
+  /* 初始化：等底图加载后再计算宽度 */
+  function initAll() {
+    ['blue','orange','red'].forEach(k => applyRatio(k, 0.5));
+    positionFloat();
+  }
+  const firstImg = PANELS.blue.wrapper.querySelector('.img-jdy');
+  if (firstImg.complete) { initAll(); } else { firstImg.addEventListener('load', initAll); }
+  window.addEventListener('load', initAll);
+</script>
+</body>
+</html>
